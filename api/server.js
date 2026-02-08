@@ -15,11 +15,30 @@ app.use((req, res, next) => {
 });
 
 const USERS = [
-    { username: 'admin', password: 'admin' },
-    { username: 'usuario', password: 'usuario'},
+    { id: '1', username: 'admin', password: 'admin', fullname: 'Administrador' },
+    { id: '2', username: 'usuario', password: 'usuario', fullname: 'Usuario' },
 ];
 
 const JWT_SECRET = 'secret';
+
+function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(403).json({ error: 'Forbidden: no token provided' });
+      }
+
+      const token = authHeader.substring(7);
+
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded;
+        next();
+      } catch (error) {
+        return res.status(401).json({ error: 'Unauthorized: invalid token' });
+      }
+      console.log(token);
+}
 
 app.post('/login', (req, res) => {
     const {username, password} = req.body;
@@ -44,3 +63,22 @@ const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`The API is running on ${PORT}`);
 });
+
+app.get('/me', authMiddleware, (req, res) => {
+    const user = USERS.find((u) => u.username === req.user.username);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const payload = {
+      id: user.id,
+      username: user.username,
+      fullname: user.fullname,
+    }
+    console.log('GET /me payload: ', payload);
+    res.json({
+      id: user.id,
+      username: user.username,
+      fullname: user.fullname,
+    });
+  });
+
