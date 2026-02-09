@@ -35,9 +35,11 @@ function authMiddleware(req, res, next) {
         req.user = decoded;
         next();
       } catch (error) {
-        return res.status(401).json({ error: 'Unauthorized: invalid token' });
+        if (error.name === 'TokenExpiredError') {
+          return res.status(401).json({ error: 'Unauthorized: token expired' });
+        }
+        return res.status(400).json({ error: 'Bad Request: invalid token' });
       }
-      console.log(token);
 }
 
 app.post('/login', (req, res) => {
