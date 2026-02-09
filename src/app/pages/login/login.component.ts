@@ -19,16 +19,22 @@ type MeState =
   | { kind: 'user'; data: MeResponse }
   | { kind: 'error'; status: number; message: string };
 
+type LoginState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string };
+
 @Component({
   selector: 'app-login',
   imports: [FormsModule, JsonPipe],
   templateUrl: './login.component.html',
-  styleUrl: './login.component.css'
+  styleUrl: './login.component.css',
 })
 export class LoginComponent implements OnInit {
   username = '';
   password = '';
   meState: MeState = { kind: 'no-token' };
+  loginState: LoginState = { kind: 'idle' };
 
   private readonly apiUrl = 'http://localhost:3000';
 
@@ -70,22 +76,81 @@ export class LoginComponent implements OnInit {
   }
 
   onSubmit(): void {
-    const body = { username: this.username, password: this.password };
-    this.http.post<LoginResponse>(this.apiUrl + '/login', body).subscribe((res) => {
-      const response = res as LoginResponse;
-      localStorage.setItem('token', response.token);
-      this.loadMe();
+    // Validar que los campos no estén vacíos
+    if (!this.username.trim() || !this.password.trim()) {
+      this.loginState = {
+        kind: 'error',
+        message: 'Por favor, completa todos los campos',
+      };
+      return;
+    }
+
+    // Limpiar errores previos y mostrar estado de carga
+    this.loginState = { kind: 'loading' };
+
+    const body = { username: this.username.trim(), password: this.password };
+
+    this.http.post<LoginResponse>(this.apiUrl + '/login', body).subscribe({
+      next: (res) => {
+        // Login exitoso
+        const response = res as LoginResponse;
+        localStorage.setItem('token', response.token);
+        this.loginState = { kind: 'idle' };
+        // Limpiar los campos del formulario
+        this.username = '';
+        this.password = '';
+        this.loadMe();
+      },
+      error: (err) => {
+        // Manejar diferentes tipos de errores
+        const status = err.status ?? 0;
+        let errorMessage = 'Error al iniciar sesión';
+
+        if (status === 401) {
+          errorMessage = 'Usuario o contraseña incorrectos';
+        } else if (status === 400) {
+          errorMessage = err.error?.error ?? 'Datos inválidos';
+        } else if (status === 0) {
+          errorMessage = 'No se pudo conectar con el servidor. Verifica tu conexión.';
+        } else {
+          errorMessage = err.error?.error ?? err.message ?? 'Error desconocido';
+        }
+
+        this.loginState = {
+          kind: 'error',
+          message: errorMessage,
+        };
+      },
     });
   }
 
   logout(): void {
     localStorage.removeItem('token');
     this.meState = { kind: 'no-token' };
+    this.loginState = { kind: 'idle' };
   }
 
   statusLabel(status: number): string {
     if (status === 401) return 'Unauthorized';
     if (status === 400) return 'Bad Request';
     return 'Error';
+  }
+
+  get isLoginLoading(): boolean {
+    return this.loginState.kind === 'loading';
+  }
+
+  get hasLoginError(): boolean {
+    return this.loginState.kind === 'error';
+  }
+
+  get loginErrorMessage(): string {
+    return this.loginState.kind === 'error' ? this.loginState.message : '';
+  }
+
+  clearLoginError(): void {
+    if (this.loginState.kind === 'error') {
+      this.loginState = { kind: 'idle' };
+    }
   }
 }
